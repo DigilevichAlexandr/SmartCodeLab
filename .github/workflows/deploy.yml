@@ -30,33 +30,7 @@ jobs:
         run: dotnet restore
 
       - name: Publish (Release)
-        run: dotnet publish -c Release
-
-      - name: Locate site directory
-        id: locate
-        shell: bash
-        run: |
-          set -e
-          shopt -s nullglob
-          CANDIDATES=(
-            bin/Release/*/publish/wwwroot
-            bin/Release/*/wwwroot
-            build/wwwroot
-          )
-          SITE_DIR=""
-          for d in "${CANDIDATES[@]}"; do
-            if [ -f "$d/index.html" ]; then
-              SITE_DIR="$d"
-              break
-            fi
-          done
-          if [ -z "$SITE_DIR" ]; then
-            echo "No wwwroot found. Directory tree:" >&2
-            ls -R
-            exit 1
-          fi
-          echo "site_dir=$SITE_DIR" >> "$GITHUB_OUTPUT"
-          echo "Using site dir: $SITE_DIR"
+        run: dotnet publish -c Release -o publish
 
       # Для проектных страниц GH Pages требуется base href вида /<repo-name>/
       - name: Set base href for GitHub Pages
@@ -65,14 +39,19 @@ jobs:
           set -e
           REPO_NAME="${{ github.event.repository.name }}"
           BASE_PATH="/${REPO_NAME}/"
-          SITE_DIR="${{ steps.locate.outputs.site_dir }}"
+          SITE_DIR="publish/wwwroot"
+          if [ ! -f "$SITE_DIR/index.html" ]; then
+            echo "index.html not found at $SITE_DIR" >&2
+            ls -R publish || true
+            exit 1
+          fi
           sed -i "s|<base href=\"/\" />|<base href=\"${BASE_PATH}\" />|" "$SITE_DIR/index.html"
           cp "$SITE_DIR/index.html" "$SITE_DIR/404.html"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ${{ steps.locate.outputs.site_dir }}
+          path: publish/wwwroot
 
   deploy:
     environment:
