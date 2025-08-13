@@ -30,22 +30,37 @@ jobs:
         run: dotnet restore
 
       - name: Publish (Release)
-        run: dotnet publish -c Release -o build
+        run: dotnet publish -c Release
+
+      - name: Locate site directory
+        id: locate
+        shell: bash
+        run: |
+          set -e
+          # Try default publish output first
+          SITE_DIR=$(ls -d bin/Release/*/publish/wwwroot 2>/dev/null | head -n 1 || true)
+          # Fallbacks (rare SDK layouts)
+          if [ -z "$SITE_DIR" ] && [ -d build/wwwroot ]; then SITE_DIR=build/wwwroot; fi
+          if [ -z "$SITE_DIR" ] && [ -d bin/Release/net9.0/wwwroot ]; then SITE_DIR=bin/Release/net9.0/wwwroot; fi
+          if [ -z "$SITE_DIR" ] ; then echo "No wwwroot found"; ls -R; exit 1; fi
+          echo "site_dir=$SITE_DIR" >> $GITHUB_OUTPUT
+          echo "Using site dir: $SITE_DIR"
 
       # Для проектных страниц GH Pages требуется base href вида /<repo-name>/
       - name: Set base href for GitHub Pages
+        shell: bash
         run: |
+          set -e
           REPO_NAME="${{ github.event.repository.name }}"
           BASE_PATH="/${REPO_NAME}/"
-          sed -i "s|<base href=\"/\" />|<base href=\"${BASE_PATH}\" />|" build/wwwroot/index.html
-
-      - name: Add SPA fallback (404.html)
-        run: cp build/wwwroot/index.html build/wwwroot/404.html
+          SITE_DIR="${{ steps.locate.outputs.site_dir }}"
+          sed -i "s|<base href=\"/\" />|<base href=\"${BASE_PATH}\" />|" "$SITE_DIR/index.html"
+          cp "$SITE_DIR/index.html" "$SITE_DIR/404.html"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: build/wwwroot
+          path: ${{ steps.locate.outputs.site_dir }}
 
   deploy:
     environment:
