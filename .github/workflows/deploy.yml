@@ -37,13 +37,25 @@ jobs:
         shell: bash
         run: |
           set -e
-          # Try default publish output first
-          SITE_DIR=$(ls -d bin/Release/*/publish/wwwroot 2>/dev/null | head -n 1 || true)
-          # Fallbacks (rare SDK layouts)
-          if [ -z "$SITE_DIR" ] && [ -d build/wwwroot ]; then SITE_DIR=build/wwwroot; fi
-          if [ -z "$SITE_DIR" ] && [ -d bin/Release/net9.0/wwwroot ]; then SITE_DIR=bin/Release/net9.0/wwwroot; fi
-          if [ -z "$SITE_DIR" ] ; then echo "No wwwroot found"; ls -R; exit 1; fi
-          echo "site_dir=$SITE_DIR" >> $GITHUB_OUTPUT
+          shopt -s nullglob
+          CANDIDATES=(
+            bin/Release/*/publish/wwwroot
+            bin/Release/*/wwwroot
+            build/wwwroot
+          )
+          SITE_DIR=""
+          for d in "${CANDIDATES[@]}"; do
+            if [ -f "$d/index.html" ]; then
+              SITE_DIR="$d"
+              break
+            fi
+          done
+          if [ -z "$SITE_DIR" ]; then
+            echo "No wwwroot found. Directory tree:" >&2
+            ls -R
+            exit 1
+          fi
+          echo "site_dir=$SITE_DIR" >> "$GITHUB_OUTPUT"
           echo "Using site dir: $SITE_DIR"
 
       # Для проектных страниц GH Pages требуется base href вида /<repo-name>/
